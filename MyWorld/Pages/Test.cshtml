@@ -1,0 +1,75 @@
+﻿@page "/Test/{pageNumber:int?}"
+@model TestModel
+@{
+    var num = Model.PageNumber;
+    var total = Model.TotalQuestions;
+    ViewData["Title"] = $"Вопрос {num} из {total}";
+}
+
+<h2>@Model.Question?.Text</h2>
+
+<form method="post">
+    <!-- Добавили id="responseBox" -->
+    <textarea id="responseBox"
+              asp-for="UserAnswer.Response"
+              class="form-control"
+              rows="3"></textarea>
+    <br />
+
+    <button type="button" class="btn btn-link"
+            onclick="document.getElementById('hint').style.display='block'">
+        Показать подсказку
+    </button>
+    <div id="hint"
+         style="display:none; margin:10px; padding:10px; border:1px solid #ccc;">
+        @Model.Question?.Hint
+    </div>
+
+    <button type="submit" class="btn btn-primary">
+        @(num < total ? "Далее" : "Закончить")
+    </button>
+</form>
+
+<!-- ====== Здесь начинается скрипт автосохранения ====== -->
+<script>
+    // debounce — ждет паузы в ms мс перед вызовом fn
+    function debounce(fn, ms) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+      };
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Номер текущего вопроса
+      const qId = @Model.PageNumber;
+      // Элемент textarea
+      const box = document.getElementById('responseBox');
+
+      // 1) Загрузить уже сохранённый черновик
+      fetch(`/api/answers/${qId}`, {
+        credentials: 'same-origin'   // чтобы передать куки авторизации
+      })
+        .then(res => res.ok
+          ? res.json()
+          : Promise.resolve({ response: "" })
+        )
+        .then(obj => {
+          box.value = obj.response;
+        });
+
+      // 2) Автосохранение при вводе (debounce 1 сек)
+      const saveDraft = debounce(() => {
+        fetch(`/api/answers/${qId}`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: box.value })
+        });
+      }, 1000);
+
+      box.addEventListener('input', saveDraft);
+    });
+</script>
+<!-- ====== Скрипт автосохранения завершён ====== -->
