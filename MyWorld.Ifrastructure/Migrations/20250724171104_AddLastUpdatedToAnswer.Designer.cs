@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using MyWorld.Data;
+using MyWorld.Ifrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MyWorld.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250724172815_AddLastUpdatedToAnswer1")]
-    partial class AddLastUpdatedToAnswer1
+    [Migration("20250724171104_AddLastUpdatedToAnswer")]
+    partial class AddLastUpdatedToAnswer
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

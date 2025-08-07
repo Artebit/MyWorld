@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using MyWorld.Models;
 
-namespace MyWorld.Data
+namespace MyWorld.Ifrastructure.Data
 {
     public static class DbInitializer
     {

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using MyWorld.Data;
+using MyWorld.Ifrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MyWorld.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250724171104_AddLastUpdatedToAnswer")]
-    partial class AddLastUpdatedToAnswer
+    [Migration("20250803171638_AddExerciseSession1")]
+    partial class AddExerciseSession1
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -243,6 +243,9 @@ namespace MyWorld.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SessionId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -251,7 +254,36 @@ namespace MyWorld.Migrations
 
                     b.HasIndex("QuestionId");
 
+                    b.HasIndex("SessionId");
+
                     b.ToTable("Answers");
+                });
+
+            modelBuilder.Entity("MyWorld.Models.ExerciseSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ExerciseSessions");
                 });
 
             modelBuilder.Entity("MyWorld.Models.Question", b =>
@@ -334,7 +366,20 @@ namespace MyWorld.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("MyWorld.Models.ExerciseSession", "Session")
+                        .WithMany("Answers")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+
                     b.Navigation("question");
+                });
+
+            modelBuilder.Entity("MyWorld.Models.ExerciseSession", b =>
+                {
+                    b.Navigation("Answers");
                 });
 #pragma warning restore 612, 618
         }

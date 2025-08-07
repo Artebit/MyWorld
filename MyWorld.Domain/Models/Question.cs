@@ -1,6 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-
-namespace MyWorld.Models
+﻿namespace MyWorld.Domain.Models
 {
     public class Question
     {

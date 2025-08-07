@@ -1,4 +1,4 @@
-﻿namespace MyWorld.Models
+﻿namespace MyWorld.Domain.Models
 {
     public class ExerciseSession
     {

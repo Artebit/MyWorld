@@ -1,9 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
-namespace MyWorld.Models
+﻿namespace MyWorld.Domain.Models
 {
     public class Answer
     {
-        [Key]
         public int Id { get; set; }
         public int QuestionId { get; set; }
         public string UserId { get; set; } = null!;
