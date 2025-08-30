@@ -1,18 +1,19 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using MyWorld.Domain.Models;
-using MyWorld.Models;
 
-namespace MyWorld.Infrastructure.Data
+namespace MyWorld.Ifrastructure.Data
 {
-    public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+    public class AppDbContext : DbContext
     {
-        public DbSet<User> Users { get; set; }
-        public DbSet<Dimension> Dimensions { get; set; }
-        public DbSet<Question> Questions { get; set; }
-        public DbSet<AnswerOption> AnswerOptions { get; set; }
-        public DbSet<TestSession> TestSessions { get; set; }
-        public DbSet<Response> Responses { get; set; }
-        public DbSet<Appointment> Appointments { get; set; }
-        public DbSet<Reminder> Reminders { get; set; }
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+        public DbSet<User> Users => Set<User>();
+        public DbSet<Dimension> Dimensions => Set<Dimension>();
+        public DbSet<Question> Questions => Set<Question>();
+        public DbSet<AnswerOption> AnswerOptions => Set<AnswerOption>();
+        public DbSet<TestSession> TestSessions => Set<TestSession>();
+        public DbSet<Response> Responses => Set<Response>();
+        public DbSet<Appointment> Appointments => Set<Appointment>();
+        public DbSet<Reminder> Reminders => Set<Reminder>();
     }
 }

@@ -1,29 +1,42 @@
-﻿// Infrastructure/Repositories/UnitOfWork.cs
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using MyWorld.Domain.Interfaces;
 using MyWorld.Domain.Interfaces.Repositories;
 using MyWorld.Domain.Models;
-using MyWorld.Infrastructure.Data;
+using MyWorld.Ifrastructure.Data;           // ВАЖНО
+using MyWorld.Ifrastructure.Repositories;   // этот же неймспейс, если файл рядом
 
-namespace MyWorld.Infrastructure.Repositories
+namespace MyWorld.Ifrastructure.Repositories
 {
-    public class UnitOfWork(AppDbContext ctx) : IUnitOfWork
+    public class UnitOfWork : IUnitOfWork
     {
+        private readonly AppDbContext _ctx;
 
-        public IUserRepository Users { get; } = new UserRepository(ctx);
-        public IRepository<Dimension> Dimensions { get; } = new EfRepository<Dimension>(ctx);
-        public IRepository<Question> Questions { get; } = new EfRepository<Question>(ctx);
-        public IRepository<AnswerOption> AnswerOptions { get; } = new EfRepository<AnswerOption>(ctx);
-        public IRepository<TestSession> TestSessions { get; } = new EfRepository<TestSession>(ctx);
-        public IRepository<Response> Responses { get; } = new EfRepository<Response>(ctx);
-        public IRepository<Appointment> Appointments { get; } = new EfRepository<Appointment>(ctx);
-        public IRepository<Reminder> Reminders { get; } = new EfRepository<Reminder>(ctx);
+        public IUserRepository Users { get; }
+        public IRepository<Dimension> Dimensions { get; }
+        public IRepository<Question> Questions { get; }
+        public IRepository<AnswerOption> AnswerOptions { get; }
+        public IRepository<TestSession> TestSessions { get; }
+        public IRepository<Response> Responses { get; }
+        public IRepository<Appointment> Appointments { get; }
+        public IRepository<Reminder> Reminders { get; }
 
-        public async Task CommitAsync() =>
-            await ctx.SaveChangesAsync();
+        public UnitOfWork(AppDbContext ctx)
+        {
+            _ctx = ctx;
 
-        public void Dispose() =>
-            ctx.Dispose();
+            Users = new UserRepository(ctx);
+            Dimensions = new EfRepository<Dimension>(ctx);
+            Questions = new EfRepository<Question>(ctx);
+            AnswerOptions = new EfRepository<AnswerOption>(ctx);
+            TestSessions = new EfRepository<TestSession>(ctx);
+            Responses = new EfRepository<Response>(ctx);
+            Appointments = new EfRepository<Appointment>(ctx);
+            Reminders = new EfRepository<Reminder>(ctx);
+        }
+
+        public Task CommitAsync() => _ctx.SaveChangesAsync();
+
+        public void Dispose() => _ctx.Dispose();
     }
 }

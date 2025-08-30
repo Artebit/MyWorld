@@ -15,4 +15,8 @@
     <Folder Include="Interfaces\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\MyWorld.Domain\MyWorld.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

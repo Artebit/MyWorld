@@ -1,124 +1,126 @@
+// Program.cs — .NET 8 Minimal API (MyWorld)
+
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
-using System.Security.Claims;
-using System.Text.Json;
-using MyWorld.Data;
-using MyWorld.Models;
+using MyWorld.Ifrastructure.Data;
+using MyWorld.Ifrastructure.Repositories;
+using MyWorld.Domain.Interfaces;
+using MyWorld.Domain.Interfaces.Repositories;
+using MyWorld.Application.Interfaces;
+using MyWorld.Application.Services;
+using MyWorld.Application.DTOs.Requests;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1) Настроить EF + PostgreSQL
-builder.Services.AddDbContext<AppDbContext>(opts =>
-    opts.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Swagger + CORS
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-// 2) Настроить Identity
-builder.Services.AddDefaultIdentity<IdentityUser>(opts =>
-{
-    opts.SignIn.RequireConfirmedAccount = false;
-})
-.AddEntityFrameworkStores<AppDbContext>();
+// DbContext (SQL Server LocalDB). Строка в appsettings.json -> ConnectionStrings:Default
+builder.Services.AddDbContext<AppDbContext>(o =>
+    o.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
-// 3) Razor Pages
-builder.Services.AddRazorPages();
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddSession(options =>
-{
-    options.Cookie.Name = ".MyWorld.Session";
-    options.IdleTimeout = TimeSpan.FromHours(1);
-    options.Cookie.HttpOnly = true;
-});
+// DI
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IQuestionService, QuestionService>();
 
 var app = builder.Build();
 
-// 4) Прогон миграций и seed вопросов
-await app.MigrateAndSeedAsync();
-
-// 5) HTTP-конвейер
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error");
-    app.UseHsts();
-}
+app.UseCors();
+app.UseSwagger();
+app.UseSwaggerUI();
 app.UseHttpsRedirection();
-app.UseStaticFiles();
 
-app.UseSession();
-app.UseRouting();
-app.UseAuthentication();
-app.UseAuthorization();
+// --------- ЭНДПОИНТЫ ДЛЯ ДЕМО ---------
+var api = app.MapGroup("/api");
 
-//
-// 6) JSON API для автосохранения «черновика» ответа
-//
-
-// Получить сохранённый черновик
-app.MapGet("/api/answers/{questionId:int}", async (
-    int questionId,
-    ClaimsPrincipal user,
-    UserManager<IdentityUser> um,
-    AppDbContext db) =>
+// Dimensions (простые CRUD через UoW)
+api.MapGet("/dimensions", (IUnitOfWork uow) =>
 {
-    var u = await um.GetUserAsync(user);
-    if (u is null)
-        return Results.Unauthorized();
-
-    var ans = await db.Answers
-        .Where(a => a.QuestionId == questionId && a.UserId == u.Id)
-        .FirstOrDefaultAsync();
-
-    // Если нет — возвращаем пустой ответ
-    return Results.Json(new
-    {
-        questionId,
-        response = ans?.Response ?? ""
-    });
+    var items = uow.Dimensions.GetAll();
+    return Results.Ok(items);
 });
 
-// Сохранить или обновить черновик
-app.MapPost("/api/answers/{questionId:int}", async (
-    int questionId,
-    HttpRequest req,
-    ClaimsPrincipal user,
-    UserManager<IdentityUser> um,
-    AppDbContext db) =>
+api.MapPost("/dimensions", async (MyWorld.Domain.Models.Dimension d, IUnitOfWork uow) =>
 {
-    var u = await um.GetUserAsync(user);
-    if (u is null)
-        return Results.Unauthorized();
+    if (d.Id == Guid.Empty) d.Id = Guid.NewGuid();
+    uow.Dimensions.Add(d);
+    await uow.CommitAsync();
+    return Results.Created($"/api/dimensions/{d.Id}", d);
+});
 
-    // читаем JSON { "response": "текст" }
-    using var doc = await JsonDocument.ParseAsync(req.Body);
-    var text = doc.RootElement.GetProperty("response").GetString() ?? "";
+api.MapPut("/dimensions/{id:guid}", async (Guid id, MyWorld.Domain.Models.Dimension d, IUnitOfWork uow) =>
+{
+    if (id != d.Id) return Results.BadRequest("Ids mismatch");
+    uow.Dimensions.Update(d);
+    await uow.CommitAsync();
+    return Results.NoContent();
+});
 
-    // находим или создаём новую запись
-    var ans = await db.Answers
-         .FirstOrDefaultAsync(a => a.QuestionId == questionId && a.UserId == u.Id);
+api.MapDelete("/dimensions/{id:guid}", async (Guid id, IUnitOfWork uow) =>
+{
+    var e = uow.Dimensions.GetById(id);
+    if (e is null) return Results.NotFound();
+    uow.Dimensions.Remove(e);
+    await uow.CommitAsync();
+    return Results.NoContent();
+});
 
-    if (ans is null)
+// Questions (через Application-сервис)
+api.MapGet("/questions", async (IQuestionService svc) =>
+{
+    var list = await svc.GetAllAsync();
+    return Results.Ok(list);
+});
+
+api.MapGet("/questions/{id:guid}", async (Guid id, IQuestionService svc) =>
+{
+    var q = await svc.GetByIdAsync(id);
+    return q is null ? Results.NotFound() : Results.Ok(q);
+});
+
+api.MapPost("/questions", async (CreateQuestionRequest req, IQuestionService svc) =>
+{
+    var created = await svc.CreateAsync(req);
+    return Results.Created($"/api/questions/{created.Id}", created);
+});
+
+api.MapPut("/questions/{id:guid}", async (Guid id, MyWorld.Application.DTOs.Requests.UpdateQuestionRequest req, IQuestionService svc) =>
+{
+    if (id != req.Id) return Results.BadRequest("Ids mismatch");
+    await svc.UpdateAsync(req);
+    return Results.NoContent();
+});
+
+api.MapDelete("/questions/{id:guid}", async (Guid id, IQuestionService svc) =>
+{
+    await svc.DeleteAsync(id);
+    return Results.NoContent();
+});
+
+// ---- авто-миграция и сидинг для демо ----
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+
+    if (!db.Dimensions.Any())
     {
-        ans = new Answer
+        var names = new[] { "Здоровье", "Карьера", "Финансы", "Отношения", "Личностный рост", "Досуг", "Дом", "Духовность" };
+        var dims = names.Select(n => new MyWorld.Domain.Models.Dimension { Id = Guid.NewGuid(), Name = n }).ToList();
+        db.Dimensions.AddRange(dims);
+        db.Questions.AddRange(dims.Select((d, i) => new MyWorld.Domain.Models.Question
         {
-            QuestionId = questionId,
-            UserId = u.Id,
-            Response = text,
-            LastUpdated = DateTime.UtcNow
-        };
-        db.Answers.Add(ans);
+            Id = Guid.NewGuid(),
+            DimensionId = d.Id,
+            Text = $"Оцените удовлетворённость сферой «{d.Name}» по шкале 1..10",
+            Order = i + 1,
+            Type = MyWorld.Domain.Models.QuestionType.Scale
+        }));
+        await db.SaveChangesAsync();
     }
-    else
-    {
-        ans.Response = text;
-        ans.LastUpdated = DateTime.UtcNow;
-        db.Answers.Update(ans);
-    }
-
-    await db.SaveChangesAsync();
-    return Results.Ok();
-});
-
-//
-// 7) Razor Pages
-//
-app.MapRazorPages();
+}
 
 app.Run();

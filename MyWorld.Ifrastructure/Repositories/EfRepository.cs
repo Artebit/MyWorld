@@ -1,12 +1,11 @@
-﻿// Infrastructure/Repositories/EfRepository.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using MyWorld.Domain.Interfaces.Repositories;
-using MyWorld.Infrastructure.Data;
+using MyWorld.Ifrastructure.Data; // ВАЖНО: Ifrastructure, не Infrastructure
 
-namespace MyWorld.Infrastructure.Repositories
+namespace MyWorld.Ifrastructure.Repositories
 {
     public class EfRepository<T> : IRepository<T> where T : class
     {
@@ -19,19 +18,14 @@ namespace MyWorld.Infrastructure.Repositories
             _set = ctx.Set<T>();
         }
 
-        public void Add(T entity) =>
-            _set.Add(entity);
+        public void Add(T entity) => _set.Add(entity);
 
-        public IEnumerable<T> GetAll() =>
-            _set.AsNoTracking().ToList();
+        public IEnumerable<T> GetAll() => _set.AsNoTracking().ToList();
 
-        public T GetById(Guid id) =>
-            _set.Find(id);
+        public T? GetById(Guid id) => _set.Find(id);
 
-        public void Update(T entity) =>
-            _set.Update(entity);
+        public void Update(T entity) => _set.Update(entity);
 
-        public void Remove(T entity) =>
-            _set.Remove(entity);
+        public void Remove(T entity) => _set.Remove(entity);
     }
 }
