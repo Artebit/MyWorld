@@ -1,4 +1,4 @@
-﻿import QuestionBlock from "@/components/QuestionBlock";
+﻿import QuestionBlock from "@/components/exercise/QuestionBlock";
 import ResultView from "@/components/ResultView";
 import { useQuestionnaire } from "@/hooks/useQuestionnaire";
 
