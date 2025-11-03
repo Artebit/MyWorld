@@ -8,7 +8,8 @@ import { globalIgnores } from 'eslint/config'
 export default tseslint.config([
   globalIgnores(['dist']),
   {
-    files: ['**/*.{ts,tsx}'],
+      files: ['**/*.{ts,tsx}'],
+      argsIgnorePattern: '^_',
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
