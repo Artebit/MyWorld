@@ -1,0 +1,63 @@
+{
+  "dimensions": [
+    {
+      "id": "career",
+      "name": "Карьера",
+      "description": "Работа и развитие"
+    },
+    {
+      "id": "health",
+      "name": "Здоровье",
+      "description": "Самочувствие"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "dimensionId": "career",
+      "order": 1,
+      "text": "Насколько ты доволен карьерой?"
+    },
+    {
+      "id": "q2",
+      "dimensionId": "health",
+      "order": 1,
+      "text": "Насколько доволен здоровьем?"
+    }
+  ],
+  "wheelSessions": [
+    {
+      "id": "sess-1",
+      "userId": "11111111-1111-1111-1111-111111111111",
+      "status": "in-progress"
+    }
+  ],
+  "answers": [
+    {
+      "id": 1,
+      "sessionId": "sess-1",
+      "questionId": "q1",
+      "value": 7
+    }
+  ],
+  "results": [
+    {
+      "sessionId": "sess-1",
+      "items": [
+        {
+          "dimensionId": "career",
+          "value": 7
+        }
+      ]
+    }
+  ],
+  "appointments": [],
+  "users": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "email": "demo@user.dev",
+      "password": "12345",
+      "name": "Demo User"
+    }
+  ]
+}
