@@ -26,7 +26,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     async function login(email: string, password: string) {
         const res = await fetch("http://localhost:5135/users");
-        const users: User[] = await res.json();
+        if (!res.ok) {
+            throw new Error("Не удалось получить список пользователей");
+        }
+
+        const payload = await res.text();
+        if (!payload) {
+            throw new Error("Сервис авторизации временно недоступен");
+        }
+
+        const users: User[] = JSON.parse(payload);
         const found = users.find(u => u.email === email /* && u.password === password */);
         if (!found) throw new Error("User not found or wrong password");
         setUser(found);
@@ -35,7 +44,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     async function register(email: string, password: string, name?: string) {
         const res = await fetch("http://localhost:5135/users");
-        const users: User[] = await res.json();
+        if (!res.ok) {
+            throw new Error("Не удалось получить список пользователей");
+        }
+
+        const payload = await res.text();
+        if (!payload) {
+            throw new Error("Сервис авторизации временно недоступен");
+        }
+
+        const users: User[] = JSON.parse(payload);
 
         if (users.some(u => u.email === email)) {
             throw new Error("Email is already registered");
