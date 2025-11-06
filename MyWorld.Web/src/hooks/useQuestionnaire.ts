@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import { getDimensions, getQuestions, startSession, submitAnswer, completeSession, getResult } from "@/services/api";
+import { getDimensions, getQuestions, startSession, submitAnswer, completeSession, getResult } from "@/Services/api";
 import type { Dimension, Question, ResultItem } from "@/lib/types";
 type AnswersMap = Record<string, number>;
 
