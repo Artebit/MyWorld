@@ -32,8 +32,8 @@ const router = createBrowserRouter([
                         path: "exercise/wheel",
                         children: [
                             { index: true, element: <WheelStartPage /> },
-                            { path: "session/:id", element: <WheelSessionPage /> },
-                            { path: "result/:id", element: <WheelResultPage /> },
+                            { path: "session/:sessionId/question/:questionId", element: <WheelSessionPage /> },
+                            { path: "result/:sessionId", element: <WheelResultPage /> },
                         ],
                     },
                     { path: "history", element: <HistoryPage /> },

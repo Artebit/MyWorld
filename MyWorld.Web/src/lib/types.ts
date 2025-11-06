@@ -9,6 +9,7 @@ export type Question = {
     text: string;
     order: number;
     dimensionId: string;
+    hint?: string | null;
 };
 
 export type SessionStartResponse = {
