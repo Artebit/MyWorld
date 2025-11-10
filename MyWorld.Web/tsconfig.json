@@ -15,7 +15,8 @@
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noEmit": true
   },
   "references": [ { "path": "./tsconfig.node.json" } ]
 }
