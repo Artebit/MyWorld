@@ -1,4 +1,4 @@
-// MyWorld.API/Program.cs  — .NET 8 Minimal API
+// MyWorld.API/Program.cs  вЂ” .NET 8 Minimal API
 using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
 using MyWorld.Ifrastructure.Data;
@@ -9,6 +9,8 @@ using MyWorld.Application.Interfaces;
 using MyWorld.Application.Services;
 using MyWorld.Application.DTOs.Requests;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 
 
@@ -18,10 +20,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    // Док (если у тебя не задан — можно опустить)
+    // Р”РѕРє (РµСЃР»Рё Сѓ С‚РµР±СЏ РЅРµ Р·Р°РґР°РЅ вЂ” РјРѕР¶РЅРѕ РѕРїСѓСЃС‚РёС‚СЊ)
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyWorld.API", Version = "v1" });
 
-    //  объявляем, что у нас есть ключ в заголовке X-UserId
+    //  РѕР±СЉСЏРІР»СЏРµРј, С‡С‚Рѕ Сѓ РЅР°СЃ РµСЃС‚СЊ РєР»СЋС‡ РІ Р·Р°РіРѕР»РѕРІРєРµ X-UserId
     c.AddSecurityDefinition("X-UserId", new OpenApiSecurityScheme
     {
         Name = "X-UserId",
@@ -30,7 +32,7 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Demo user id (GUID) passed via header"
     });
 
-    //  требуем эту схему для всех операций (чтобы кнопка Authorize работала глобально)
+    //  С‚СЂРµР±СѓРµРј СЌС‚Сѓ СЃС…РµРјСѓ РґР»СЏ РІСЃРµС… РѕРїРµСЂР°С†РёР№ (С‡С‚РѕР±С‹ РєРЅРѕРїРєР° Authorize СЂР°Р±РѕС‚Р°Р»Р° РіР»РѕР±Р°Р»СЊРЅРѕ)
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -48,7 +50,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-// ---- Connection string resolve (3 источника: appsettings -> env -> дефолт) ----
+// ---- Connection string resolve (3 РёСЃС‚РѕС‡РЅРёРєР°: appsettings -> env -> РґРµС„РѕР»С‚) ----
 var conn = builder.Configuration.GetConnectionString("Defau" +
     "lt");
 if (string.IsNullOrWhiteSpace(conn))
@@ -56,7 +58,7 @@ if (string.IsNullOrWhiteSpace(conn))
 if (string.IsNullOrWhiteSpace(conn))
     conn = "Server=(localdb)\\MSSQLLocalDB;Database=MyWorldDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true";
 
-// Небольшая диагностика — выведем куда коннектимся (без пароля)
+// РќРµР±РѕР»СЊС€Р°СЏ РґРёР°РіРЅРѕСЃС‚РёРєР° вЂ” РІС‹РІРµРґРµРј РєСѓРґР° РєРѕРЅРЅРµРєС‚РёРјСЃСЏ (Р±РµР· РїР°СЂРѕР»СЏ)
 Console.WriteLine($"[DB] Using connection: {conn}");
 
 // DbContext
@@ -67,11 +69,12 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 var app = builder.Build();
 app.Use(async (ctx, next) =>
 {
-    // Берём userId из заголовка, если задан
+    // Р‘РµСЂС‘Рј userId РёР· Р·Р°РіРѕР»РѕРІРєР°, РµСЃР»Рё Р·Р°РґР°РЅ
     if (ctx.Request.Headers.TryGetValue("X-UserId", out var raw)
         && Guid.TryParse(raw, out var uid))
     {
@@ -80,7 +83,7 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-// Хелпер: получить userId из контекста
+// РҐРµР»РїРµСЂ: РїРѕР»СѓС‡РёС‚СЊ userId РёР· РєРѕРЅС‚РµРєСЃС‚Р°
 Guid? GetUserId(HttpContext ctx)
     => ctx.Items.TryGetValue("UserId", out var val) && val is Guid g ? g : null;
 
@@ -90,10 +93,44 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
 
-// --------- ЭНДПОИНТЫ ДЛЯ ДЕМО ---------
+// --------- Р­РќР”РџРћРРќРўР« Р”Р›РЇ Р”Р•РњРћ ---------
 var api = app.MapGroup("/api");
 
-// Dimensions (простые CRUD через UoW)
+// Auth
+var auth = api.MapGroup("/auth");
+
+auth.MapPost("/register", async (RegisterUserRequest req, IAuthService svc) =>
+{
+    try
+    {
+        var user = await svc.RegisterAsync(req);
+        return Results.Created($"/api/users/{user.Id}", user);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { message = ex.Message });
+    }
+});
+
+auth.MapPost("/login", async (LoginUserRequest req, IAuthService svc) =>
+{
+    try
+    {
+        var user = await svc.LoginAsync(req);
+        if (user is null) return Results.Unauthorized();
+        return Results.Ok(user);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
+// Dimensions (РїСЂРѕСЃС‚С‹Рµ CRUD С‡РµСЂРµР· UoW)
 api.MapGet("/dimensions", (IUnitOfWork uow) => Results.Ok(uow.Dimensions.GetAll()));
 
 api.MapPost("/dimensions", async (MyWorld.Domain.Models.Dimension d, IUnitOfWork uow) =>
@@ -121,7 +158,7 @@ api.MapDelete("/dimensions/{id:guid}", async (Guid id, IUnitOfWork uow) =>
     return Results.NoContent();
 });
 
-// Questions (через Application-сервис)
+// Questions (С‡РµСЂРµР· Application-СЃРµСЂРІРёСЃ)
 api.MapGet("/questions", async (IQuestionService svc) =>
 {
     var list = await svc.GetAllAsync();
@@ -156,7 +193,7 @@ api.MapDelete("/questions/{id:guid}", async (Guid id, IQuestionService svc) =>
 
 var sessions = api.MapGroup("/sessions");
 
-// 1) Старт сессии (создаёт TestSession)
+// 1) РЎС‚Р°СЂС‚ СЃРµСЃСЃРёРё (СЃРѕР·РґР°С‘С‚ TestSession)
 sessions.MapPost("/start", async (Guid userId, IUnitOfWork uow) =>
 {
     var s = new MyWorld.Domain.Models.TestSession
@@ -170,7 +207,7 @@ sessions.MapPost("/start", async (Guid userId, IUnitOfWork uow) =>
     return Results.Ok(new { sessionId = s.Id, s.StartedAt });
 });
 
-// 2) Сохранить ответ на вопрос (числовой или текстовый)
+// 2) РЎРѕС…СЂР°РЅРёС‚СЊ РѕС‚РІРµС‚ РЅР° РІРѕРїСЂРѕСЃ (С‡РёСЃР»РѕРІРѕР№ РёР»Рё С‚РµРєСЃС‚РѕРІС‹Р№)
 sessions.MapPost("/{sessionId:guid}/answers", async (Guid sessionId, SubmitAnswerRequest req, IUnitOfWork uow) =>
 {
     if (req.Value is null && string.IsNullOrWhiteSpace(req.Text))
@@ -189,7 +226,7 @@ sessions.MapPost("/{sessionId:guid}/answers", async (Guid sessionId, SubmitAnswe
     return Results.Created($"/api/sessions/{sessionId}/answers/{resp.Id}", resp);
 });
 
-// 3) Завершить сессию
+// 3) Р—Р°РІРµСЂС€РёС‚СЊ СЃРµСЃСЃРёСЋ
 sessions.MapPost("/{sessionId:guid}/complete", async (Guid sessionId, IUnitOfWork uow) =>
 {
     var s = uow.TestSessions.GetById(sessionId);
@@ -203,7 +240,7 @@ sessions.MapPost("/{sessionId:guid}/complete", async (Guid sessionId, IUnitOfWor
     return Results.Ok(new { s.Id, s.CompletedAt });
 });
 
-// 4) Итог: средний балл по каждой сфере (для диаграммы «колеса»)
+// 4) РС‚РѕРі: СЃСЂРµРґРЅРёР№ Р±Р°Р»Р» РїРѕ РєР°Р¶РґРѕР№ СЃС„РµСЂРµ (РґР»СЏ РґРёР°РіСЂР°РјРјС‹ В«РєРѕР»РµСЃР°В»)
 sessions.MapGet("/{sessionId:guid}/result", (Guid sessionId, IUnitOfWork uow) =>
 {
     var responses = uow.Responses.GetAll()
@@ -226,7 +263,7 @@ sessions.MapGet("/{sessionId:guid}/result", (Guid sessionId, IUnitOfWork uow) =>
     return Results.Ok(result);
 });
 
-// ===== Appointments (встречи) =====
+// ===== Appointments (РІСЃС‚СЂРµС‡Рё) =====
 var appointments = api.MapGroup("/appointments");
 
 // GET /api/appointments
@@ -313,7 +350,7 @@ appointments.MapDelete("/{id:guid}", async (HttpContext ctx, Guid id, IUnitOfWor
     return Results.NoContent();
 });
 
-// ===== Reminders (напоминания) =====
+// ===== Reminders (РЅР°РїРѕРјРёРЅР°РЅРёСЏ) =====
 var reminders = api.MapGroup("/reminders");
 
 // GET /api/reminders?onlyUpcoming=true
@@ -382,25 +419,64 @@ reminders.MapDelete("/{id:guid}", async (HttpContext ctx, Guid id, IUnitOfWork u
 });
 
 
-// ---- авто-миграция и сидинг для демо ----
+// ---- Р°РІС‚Рѕ-РјРёРіСЂР°С†РёСЏ Рё СЃРёРґРёРЅРі РґР»СЏ РґРµРјРѕ ----
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 
+    static string HashSeedPassword(string password)
+    {
+        var salt = RandomNumberGenerator.GetBytes(16);
+        var hash = Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(password),
+            salt,
+            100_000,
+            HashAlgorithmName.SHA256,
+            32);
+
+        var payload = new byte[salt.Length + hash.Length];
+        Buffer.BlockCopy(salt, 0, payload, 0, salt.Length);
+        Buffer.BlockCopy(hash, 0, payload, salt.Length, hash.Length);
+        return Convert.ToBase64String(payload);
+    }
+
+    var hasChanges = false;
+
     if (!db.Dimensions.Any())
     {
-        var names = new[] { "Здоровье", "Карьера", "Финансы", "Отношения", "Личностный рост", "Досуг", "Дом", "Духовность" };
+        var names = new[] { "Р—РґРѕСЂРѕРІСЊРµ", "РљР°СЂСЊРµСЂР°", "Р¤РёРЅР°РЅСЃС‹", "РћС‚РЅРѕС€РµРЅРёСЏ", "Р›РёС‡РЅРѕСЃС‚РЅС‹Р№ СЂРѕСЃС‚", "Р”РѕСЃСѓРі", "Р”РѕРј", "Р”СѓС…РѕРІРЅРѕСЃС‚СЊ" };
         var dims = names.Select(n => new MyWorld.Domain.Models.Dimension { Id = Guid.NewGuid(), Name = n }).ToList();
         db.Dimensions.AddRange(dims);
         db.Questions.AddRange(dims.Select((d, i) => new MyWorld.Domain.Models.Question
         {
             Id = Guid.NewGuid(),
             DimensionId = d.Id,
-            Text = $"Оцените удовлетворённость сферой «{d.Name}» по шкале 1..10",
+            Text = $"РћС†РµРЅРёС‚Рµ СѓРґРѕРІР»РµС‚РІРѕСЂС‘РЅРЅРѕСЃС‚СЊ СЃС„РµСЂРѕР№ В«{d.Name}В» РїРѕ С€РєР°Р»Рµ 1..10",
             Order = i + 1,
             Type = MyWorld.Domain.Models.QuestionType.Scale
         }));
+        hasChanges = true;
+    }
+
+    if (!db.Users.Any())
+    {
+        var demoUser = new MyWorld.Domain.Models.User
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Email = "demo@user.dev",
+            PasswordHash = HashSeedPassword("12345"),
+            FirstName = "Demo",
+            LastName = "User",
+            RegisteredAt = DateTime.UtcNow,
+            LastLoginAt = null
+        };
+        db.Users.Add(demoUser);
+        hasChanges = true;
+    }
+
+    if (hasChanges)
+    {
         await db.SaveChangesAsync();
     }
 }

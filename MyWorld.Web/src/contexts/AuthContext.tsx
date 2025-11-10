@@ -1,11 +1,7 @@
-﻿import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useEffect, useState } from "react";
+import { login as loginRequest, register as registerRequest, type AuthUser } from "@/Services/auth";
 
-export type User = {
-    id: number;
-    email: string;
-    name: string;
-    password?: string;
-};
+export type User = AuthUser;
 
 export type AuthCtx = {
     user: User | null;
@@ -21,10 +17,17 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     useEffect(() => {
         const raw = localStorage.getItem("auth_user");
-        if (raw) setUser(JSON.parse(raw));
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw) as User;
+            setUser(parsed);
+        } catch {
+            localStorage.removeItem("auth_user");
+        }
     }, []);
 
     async function login(email: string, password: string) {
+
         const res = await fetch("http://localhost:5135/users");
         if (!res.ok) {
             throw new Error("Не удалось получить список пользователей");
@@ -55,26 +58,22 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
         const users: User[] = JSON.parse(payload);
 
-        if (users.some(u => u.email === email)) {
-            throw new Error("Email is already registered");
+        if (name && name.trim().length > 0) {
+            const parts = name.trim().split(/\s+/);
+            firstName = parts[0];
+            if (parts.length > 1) {
+                lastName = parts.slice(1).join(" ");
+            }
         }
 
-        const newUser: User = {
-            id: Date.now(),
+        const registered = await registerRequest({
             email,
-            name: name ?? email.split("@")[0],
             password,
-        };
-
-        await fetch("http://localhost:5135/users", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(newUser),
+            firstName,
+            lastName,
         });
-
-        const { password: _omit, ...safeUser } = newUser;
-        setUser(safeUser);
-        localStorage.setItem("auth_user", JSON.stringify(safeUser));
+        setUser(registered);
+        localStorage.setItem("auth_user", JSON.stringify(registered));
     }
 
     function logout() {

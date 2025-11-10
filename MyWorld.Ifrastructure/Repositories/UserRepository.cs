@@ -11,6 +11,6 @@ namespace MyWorld.Ifrastructure.Repositories
         public UserRepository(AppDbContext ctx) : base(ctx) { }
 
         public User? GetByEmail(string email) =>
-            _ctx.Users.AsNoTracking().FirstOrDefault(u => u.Email == email);
+            _ctx.Users.FirstOrDefault(u => u.Email == email);
     }
 }
