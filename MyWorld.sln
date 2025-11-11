@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MyWorld.Domain", "MyWorld.D
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MyWorld.Application", "MyWorld.Application\MyWorld.Application.csproj", "{3013A8A3-F940-40F4-8901-76E7DC819F39}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MyWorld.Ifrastructure", "MyWorld.Ifrastructure\MyWorld.Ifrastructure.csproj", "{037663C0-B4AA-474B-8B3F-50156B04D244}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MyWorld.Infrastructure", "MyWorld.Infrastructure\MyWorld.Infrastructure.csproj", "{037663C0-B4AA-474B-8B3F-50156B04D244}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyWorld.API", "MyWorld.API\MyWorld.API.csproj", "{EAC773E7-5E49-4619-8AF3-DDFCF41BF390}"
 EndProject

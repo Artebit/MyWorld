@@ -1,39 +1,28 @@
-// MyWorld.API/Program.cs  — .NET 8 Minimal API
-using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
-using MyWorld.Ifrastructure.Data;
-using MyWorld.Ifrastructure.Repositories;
-using MyWorld.Domain.Interfaces;
-using MyWorld.Domain.Interfaces.Repositories;
+using Microsoft.OpenApi.Models;
+using MyWorld.Application.DTOs.Requests;
 using MyWorld.Application.Interfaces;
 using MyWorld.Application.Services;
-using MyWorld.Application.DTOs.Requests;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-
-
+using MyWorld.Domain.Interfaces;
+using MyWorld.Domain.Interfaces.Repositories;
+using MyWorld.Infrastructure;
+using MyWorld.Infrastructure.Data;
+using MyWorld.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Swagger + CORS
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+builder.Services.AddSwaggerGen(options =>
 {
-    // Док (если у тебя не задан — можно опустить)
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyWorld.API", Version = "v1" });
-
-    //  объявляем, что у нас есть ключ в заголовке X-UserId
-    c.AddSecurityDefinition("X-UserId", new OpenApiSecurityScheme
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "MyWorld.API", Version = "v1" });
+    options.AddSecurityDefinition("X-UserId", new OpenApiSecurityScheme
     {
         Name = "X-UserId",
         Type = SecuritySchemeType.ApiKey,
         In = ParameterLocation.Header,
-        Description = "Demo user id (GUID) passed via header"
+        Description = "Demo user id (GUID) passed via header",
     });
-
-    //  требуем эту схему для всех операций (чтобы кнопка Authorize работала глобально)
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
@@ -41,69 +30,61 @@ builder.Services.AddSwaggerGen(c =>
                 Reference = new OpenApiReference
                 {
                     Type = ReferenceType.SecurityScheme,
-                    Id = "X-UserId"
-                }
+                    Id = "X-UserId",
+                },
             },
             Array.Empty<string>()
-        }
+        },
     });
 });
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-// ---- Connection string resolve (3 источника: appsettings -> env -> дефолт) ----
-var conn = builder.Configuration.GetConnectionString("Defau" +
-    "lt");
-if (string.IsNullOrWhiteSpace(conn))
-    conn = Environment.GetEnvironmentVariable("MYWORLD_CONN");
-if (string.IsNullOrWhiteSpace(conn))
-    conn = "Server=(localdb)\\MSSQLLocalDB;Database=MyWorldDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true";
+builder.Services.AddCors(policy =>
+    policy.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
-// Небольшая диагностика — выведем куда коннектимся (без пароля)
-Console.WriteLine($"[DB] Using connection: {conn}");
+var connectionString = builder.Configuration.GetConnectionString("Default")
+    ?? Environment.GetEnvironmentVariable("MYWORLD_CONN")
+    ?? "Server=(localdb)\\MSSQLLocalDB;Database=MyWorldDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true";
 
-// DbContext
-builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlServer(conn));
+builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
 
-// DI
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<IReminderService, ReminderService>();
+builder.Services.AddScoped<ITestSessionService, TestSessionService>();
 
 var app = builder.Build();
-app.Use(async (ctx, next) =>
+
+app.Use(async (context, next) =>
 {
-    // Берём userId из заголовка, если задан
-    if (ctx.Request.Headers.TryGetValue("X-UserId", out var raw)
-        && Guid.TryParse(raw, out var uid))
+    if (context.Request.Headers.TryGetValue("X-UserId", out var raw) && Guid.TryParse(raw, out var userId))
     {
-        ctx.Items["UserId"] = uid;
+        context.Items["UserId"] = userId;
     }
+
     await next();
 });
 
-// Хелпер: получить userId из контекста
-Guid? GetUserId(HttpContext ctx)
-    => ctx.Items.TryGetValue("UserId", out var val) && val is Guid g ? g : null;
-
+Guid? GetUserId(HttpContext context) =>
+    context.Items.TryGetValue("UserId", out var value) && value is Guid guid ? guid : null;
 
 app.UseCors();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
 
-// --------- ЭНДПОИНТЫ ДЛЯ ДЕМО ---------
 var api = app.MapGroup("/api");
 
-// Auth
 var auth = api.MapGroup("/auth");
 
-auth.MapPost("/register", async (RegisterUserRequest req, IAuthService svc) =>
+auth.MapPost("/register", async (RegisterUserRequest request, IAuthService service) =>
 {
     try
     {
-        var user = await svc.RegisterAsync(req);
+        var user = await service.RegisterAsync(request);
         return Results.Created($"/api/users/{user.Id}", user);
     }
     catch (ArgumentException ex)
@@ -116,12 +97,16 @@ auth.MapPost("/register", async (RegisterUserRequest req, IAuthService svc) =>
     }
 });
 
-auth.MapPost("/login", async (LoginUserRequest req, IAuthService svc) =>
+auth.MapPost("/login", async (LoginUserRequest request, IAuthService service) =>
 {
     try
     {
-        var user = await svc.LoginAsync(req);
-        if (user is null) return Results.Unauthorized();
+        var user = await service.LoginAsync(request);
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
         return Results.Ok(user);
     }
     catch (ArgumentException ex)
@@ -130,357 +115,348 @@ auth.MapPost("/login", async (LoginUserRequest req, IAuthService svc) =>
     }
 });
 
-// Dimensions (простые CRUD через UoW)
 api.MapGet("/dimensions", (IUnitOfWork uow) => Results.Ok(uow.Dimensions.GetAll()));
 
-api.MapPost("/dimensions", async (MyWorld.Domain.Models.Dimension d, IUnitOfWork uow) =>
+api.MapPost("/dimensions", async (MyWorld.Domain.Models.Dimension dimension, IUnitOfWork uow) =>
 {
-    if (d.Id == Guid.Empty) d.Id = Guid.NewGuid();
-    uow.Dimensions.Add(d);
+    if (dimension.Id == Guid.Empty)
+    {
+        dimension.Id = Guid.NewGuid();
+    }
+
+    uow.Dimensions.Add(dimension);
     await uow.CommitAsync();
-    return Results.Created($"/api/dimensions/{d.Id}", d);
+    return Results.Created($"/api/dimensions/{dimension.Id}", dimension);
 });
 
-api.MapPut("/dimensions/{id:guid}", async (Guid id, MyWorld.Domain.Models.Dimension d, IUnitOfWork uow) =>
+api.MapPut("/dimensions/{id:guid}", async (Guid id, MyWorld.Domain.Models.Dimension dimension, IUnitOfWork uow) =>
 {
-    if (id != d.Id) return Results.BadRequest("Ids mismatch");
-    uow.Dimensions.Update(d);
+    if (id != dimension.Id)
+    {
+        return Results.BadRequest(new { message = "Ids mismatch." });
+    }
+
+    uow.Dimensions.Update(dimension);
     await uow.CommitAsync();
     return Results.NoContent();
 });
 
 api.MapDelete("/dimensions/{id:guid}", async (Guid id, IUnitOfWork uow) =>
 {
-    var e = uow.Dimensions.GetById(id);
-    if (e is null) return Results.NotFound();
-    uow.Dimensions.Remove(e);
+    var entity = uow.Dimensions.GetById(id);
+    if (entity is null)
+    {
+        return Results.NotFound();
+    }
+
+    uow.Dimensions.Remove(entity);
     await uow.CommitAsync();
     return Results.NoContent();
 });
 
-// Questions (через Application-сервис)
-api.MapGet("/questions", async (IQuestionService svc) =>
+api.MapGet("/questions", async (IQuestionService service) =>
 {
-    var list = await svc.GetAllAsync();
+    var list = await service.GetAllAsync();
     return Results.Ok(list);
 });
 
-api.MapGet("/questions/{id:guid}", async (Guid id, IQuestionService svc) =>
+api.MapGet("/questions/{id:guid}", async (Guid id, IQuestionService service) =>
 {
-    var q = await svc.GetByIdAsync(id);
-    return q is null ? Results.NotFound() : Results.Ok(q);
+    var question = await service.GetByIdAsync(id);
+    return question is null ? Results.NotFound() : Results.Ok(question);
 });
 
-api.MapPost("/questions", async (CreateQuestionRequest req, IQuestionService svc) =>
+api.MapPost("/questions", async (CreateQuestionRequest request, IQuestionService service) =>
 {
-    var created = await svc.CreateAsync(req);
+    var created = await service.CreateAsync(request);
     return Results.Created($"/api/questions/{created.Id}", created);
 });
 
-api.MapPut("/questions/{id:guid}", async (Guid id, MyWorld.Application.DTOs.Requests.UpdateQuestionRequest req, IQuestionService svc) =>
+api.MapPut("/questions/{id:guid}", async (Guid id, UpdateQuestionRequest request, IQuestionService service) =>
 {
-    if (id != req.Id) return Results.BadRequest("Ids mismatch");
-    await svc.UpdateAsync(req);
+    if (id != request.Id)
+    {
+        return Results.BadRequest(new { message = "Ids mismatch." });
+    }
+
+    await service.UpdateAsync(request);
     return Results.NoContent();
 });
 
-api.MapDelete("/questions/{id:guid}", async (Guid id, IQuestionService svc) =>
+api.MapDelete("/questions/{id:guid}", async (Guid id, IQuestionService service) =>
 {
-    await svc.DeleteAsync(id);
+    await service.DeleteAsync(id);
     return Results.NoContent();
 });
-// ===== Test Sessions & Responses =====
 
 var sessions = api.MapGroup("/sessions");
 
-// 1) Старт сессии (создаёт TestSession)
-sessions.MapPost("/start", async (Guid userId, IUnitOfWork uow) =>
+sessions.MapPost("/start", async (Guid userId, ITestSessionService service) =>
 {
-    var s = new MyWorld.Domain.Models.TestSession
+    if (userId == Guid.Empty)
     {
-        Id = Guid.NewGuid(),
-        UserId = userId,
-        StartedAt = DateTime.UtcNow
-    };
-    uow.TestSessions.Add(s);
-    await uow.CommitAsync();
-    return Results.Ok(new { sessionId = s.Id, s.StartedAt });
-});
-
-// 2) Сохранить ответ на вопрос (числовой или текстовый)
-sessions.MapPost("/{sessionId:guid}/answers", async (Guid sessionId, SubmitAnswerRequest req, IUnitOfWork uow) =>
-{
-    if (req.Value is null && string.IsNullOrWhiteSpace(req.Text))
-        return Results.BadRequest("Either Value or Text must be provided");
-
-    var resp = new MyWorld.Domain.Models.Response
-    {
-        Id = Guid.NewGuid(),
-        SessionId = sessionId,
-        QuestionId = req.QuestionId,
-        AnswerValue = req.Value,
-        AnswerText = req.Text
-    };
-    uow.Responses.Add(resp);
-    await uow.CommitAsync();
-    return Results.Created($"/api/sessions/{sessionId}/answers/{resp.Id}", resp);
-});
-
-// 3) Завершить сессию
-sessions.MapPost("/{sessionId:guid}/complete", async (Guid sessionId, IUnitOfWork uow) =>
-{
-    var s = uow.TestSessions.GetById(sessionId);
-    if (s is null) return Results.NotFound();
-    if (s.CompletedAt is null)
-    {
-        s.CompletedAt = DateTime.UtcNow;
-        uow.TestSessions.Update(s);
-        await uow.CommitAsync();
+        return Results.BadRequest(new { message = "UserId is required." });
     }
-    return Results.Ok(new { s.Id, s.CompletedAt });
+
+    var start = await service.StartSessionAsync(userId);
+    return Results.Ok(start);
 });
 
-// 4) Итог: средний балл по каждой сфере (для диаграммы «колеса»)
-sessions.MapGet("/{sessionId:guid}/result", (Guid sessionId, IUnitOfWork uow) =>
+sessions.MapPost("/{sessionId:guid}/answers", async (Guid sessionId, SubmitAnswerRequest request, ITestSessionService service) =>
 {
-    var responses = uow.Responses.GetAll()
-        .Where(r => r.SessionId == sessionId && r.AnswerValue.HasValue)
-        .ToList();
-
-    var questions = uow.Questions.GetAll().ToDictionary(q => q.Id, q => q.DimensionId);
-    var dims = uow.Dimensions.GetAll().ToDictionary(d => d.Id, d => d.Name);
-
-    var result = responses
-        .GroupBy(r => questions.TryGetValue(r.QuestionId, out var did) ? did : Guid.Empty)
-        .Where(g => g.Key != Guid.Empty)
-        .Select(g => new
+    try
+    {
+        var recorded = await service.SubmitAnswerAsync(sessionId, request);
+        if (recorded is null)
         {
-            dimensionId = g.Key,
-            dimension = dims.TryGetValue(g.Key, out var name) ? name : g.Key.ToString(),
-            average = Math.Round(g.Average(x => (double)x.AnswerValue!.Value), 2)
-        });
+            return Results.NotFound();
+        }
 
-    return Results.Ok(result);
+        return Results.Created($"/api/sessions/{sessionId}/answers/{recorded.Id}", recorded);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
 });
 
-// ===== Appointments (встречи) =====
+sessions.MapPost("/{sessionId:guid}/complete", async (Guid sessionId, ITestSessionService service) =>
+{
+    try
+    {
+        var completion = await service.CompleteSessionAsync(sessionId);
+        return completion is null ? Results.NotFound() : Results.Ok(completion);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
+sessions.MapGet("/{sessionId:guid}/result", async (Guid sessionId, ITestSessionService service) =>
+{
+    try
+    {
+        var result = await service.GetResultAsync(sessionId);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
 var appointments = api.MapGroup("/appointments");
 
-// GET /api/appointments
-appointments.MapGet("/", (HttpContext ctx, IUnitOfWork uow) =>
+appointments.MapGet("/", async (HttpContext context, IAppointmentService service) =>
 {
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
-
-    var list = uow.Appointments.GetAll()
-        .Where(a => a.UserId == uid)
-        .OrderBy(a => a.StartTime)
-        .ToList();
-
-    return Results.Ok(list);
-});
-
-// GET /api/appointments/{id}
-appointments.MapGet("/{id:guid}", (HttpContext ctx, Guid id, IUnitOfWork uow) =>
-{
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
-
-    var a = uow.Appointments.GetById(id);
-    if (a is null || a.UserId != uid) return Results.NotFound();
-
-    return Results.Ok(a);
-});
-
-// POST /api/appointments
-appointments.MapPost("/", async (HttpContext ctx, MyWorld.Application.DTOs.Requests.CreateAppointmentRequest req, IUnitOfWork uow) =>
-{
-    var uid = GetUserId(ctx) ?? (req.UserId == Guid.Empty ? null : req.UserId);
-    if (uid is null) return Results.BadRequest("UserId is required (header X-UserId or body).");
-    if (req.EndTime <= req.StartTime) return Results.BadRequest("EndTime must be after StartTime.");
-
-    var a = new MyWorld.Domain.Models.Appointment
+    var userId = GetUserId(context);
+    if (userId is null)
     {
-        Id = Guid.NewGuid(),
-        UserId = uid.Value,
-        Title = req.Title,
-        Description = req.Description,
-        StartTime = req.StartTime,
-        EndTime = req.EndTime,
-        Location = req.Location
-    };
+        return Results.Unauthorized();
+    }
 
-    uow.Appointments.Add(a);
-    await uow.CommitAsync();
-    return Results.Created($"/api/appointments/{a.Id}", a);
+    var items = await service.GetForUserAsync(userId.Value);
+    return Results.Ok(items);
 });
 
-// PUT /api/appointments/{id}
-appointments.MapPut("/{id:guid}", async (HttpContext ctx, Guid id, MyWorld.Application.DTOs.Requests.UpdateAppointmentRequest req, IUnitOfWork uow) =>
+appointments.MapGet("/{id:guid}", async (HttpContext context, Guid id, IAppointmentService service) =>
 {
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
+    var userId = GetUserId(context);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
 
-    var a = uow.Appointments.GetById(id);
-    if (a is null || a.UserId != uid) return Results.NotFound();
-    if (req.EndTime <= req.StartTime) return Results.BadRequest("EndTime must be after StartTime.");
-
-    a.Title = req.Title;
-    a.Description = req.Description;
-    a.StartTime = req.StartTime;
-    a.EndTime = req.EndTime;
-    a.Location = req.Location;
-
-    uow.Appointments.Update(a);
-    await uow.CommitAsync();
-    return Results.NoContent();
+    var appointment = await service.GetByIdAsync(userId.Value, id);
+    return appointment is null ? Results.NotFound() : Results.Ok(appointment);
 });
 
-// DELETE /api/appointments/{id}
-appointments.MapDelete("/{id:guid}", async (HttpContext ctx, Guid id, IUnitOfWork uow) =>
+appointments.MapPost("/", async (HttpContext context, CreateAppointmentRequest request, IAppointmentService service) =>
 {
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
+    try
+    {
+        var userId = GetUserId(context) ?? (request.UserId == Guid.Empty ? null : request.UserId);
+        if (userId is null)
+        {
+            return Results.BadRequest(new { message = "UserId is required (header X-UserId or body)." });
+        }
 
-    var a = uow.Appointments.GetById(id);
-    if (a is null || a.UserId != uid) return Results.NotFound();
-
-    uow.Appointments.Remove(a);
-    await uow.CommitAsync();
-    return Results.NoContent();
+        var created = await service.CreateAsync(userId.Value, request);
+        return Results.Created($"/api/appointments/{created.Id}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
 });
 
-// ===== Reminders (напоминания) =====
+appointments.MapPut("/{id:guid}", async (HttpContext context, Guid id, UpdateAppointmentRequest request, IAppointmentService service) =>
+{
+    if (id != request.Id)
+    {
+        return Results.BadRequest(new { message = "Ids mismatch." });
+    }
+
+    var userId = GetUserId(context);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    try
+    {
+        var updated = await service.UpdateAsync(userId.Value, request);
+        return updated ? Results.NoContent() : Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
+appointments.MapDelete("/{id:guid}", async (HttpContext context, Guid id, IAppointmentService service) =>
+{
+    var userId = GetUserId(context);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    try
+    {
+        var deleted = await service.DeleteAsync(userId.Value, id);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
 var reminders = api.MapGroup("/reminders");
 
-// GET /api/reminders?onlyUpcoming=true
-reminders.MapGet("/", (HttpContext ctx, bool onlyUpcoming, IUnitOfWork uow) =>
+reminders.MapGet("/", async (HttpContext context, bool onlyUpcoming, IReminderService service) =>
 {
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
-
-    var q = uow.Reminders.GetAll().Where(r => r.UserId == uid);
-    if (onlyUpcoming)
-        q = q.Where(r => r.RemindAt >= DateTime.UtcNow && !r.IsSent);
-
-    return Results.Ok(q.OrderBy(r => r.RemindAt).ToList());
-});
-
-// POST /api/reminders
-reminders.MapPost("/", async (HttpContext ctx, MyWorld.Application.DTOs.Requests.CreateReminderRequest req, IUnitOfWork uow) =>
-{
-    var uid = GetUserId(ctx) ?? (req.UserId == Guid.Empty ? null : req.UserId);
-    if (uid is null) return Results.BadRequest("UserId is required (header X-UserId or body).");
-
-    var r = new MyWorld.Domain.Models.Reminder
+    var userId = GetUserId(context);
+    if (userId is null)
     {
-        Id = Guid.NewGuid(),
-        UserId = uid.Value,
-        RelatedAppointmentId = req.RelatedAppointmentId,
-        Message = req.Message,
-        RemindAt = req.RemindAt,
-        IsSent = false
-    };
+        return Results.Unauthorized();
+    }
 
-    uow.Reminders.Add(r);
-    await uow.CommitAsync();
-    return Results.Created($"/api/reminders/{r.Id}", r);
+    try
+    {
+        var items = await service.GetForUserAsync(userId.Value, onlyUpcoming);
+        return Results.Ok(items);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
 });
 
-// PUT /api/reminders/{id}
-reminders.MapPut("/{id:guid}", async (HttpContext ctx, Guid id, MyWorld.Application.DTOs.Requests.UpdateReminderRequest req, IUnitOfWork uow) =>
+reminders.MapPost("/", async (HttpContext context, CreateReminderRequest request, IReminderService service) =>
 {
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
+    try
+    {
+        var userId = GetUserId(context) ?? (request.UserId == Guid.Empty ? null : request.UserId);
+        if (userId is null)
+        {
+            return Results.BadRequest(new { message = "UserId is required (header X-UserId or body)." });
+        }
 
-    var r = uow.Reminders.GetById(id);
-    if (r is null || r.UserId != uid) return Results.NotFound();
-
-    r.Message = req.Message;
-    r.RemindAt = req.RemindAt;
-
-    uow.Reminders.Update(r);
-    await uow.CommitAsync();
-    return Results.NoContent();
+        var created = await service.CreateAsync(userId.Value, request);
+        return Results.Created($"/api/reminders/{created.Id}", created);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
 });
 
-// DELETE /api/reminders/{id}
-reminders.MapDelete("/{id:guid}", async (HttpContext ctx, Guid id, IUnitOfWork uow) =>
+reminders.MapPut("/{id:guid}", async (HttpContext context, Guid id, UpdateReminderRequest request, IReminderService service) =>
 {
-    var uid = GetUserId(ctx);
-    if (uid is null) return Results.Unauthorized();
+    if (id != request.Id)
+    {
+        return Results.BadRequest(new { message = "Ids mismatch." });
+    }
 
-    var r = uow.Reminders.GetById(id);
-    if (r is null || r.UserId != uid) return Results.NotFound();
+    var userId = GetUserId(context);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
 
-    uow.Reminders.Remove(r);
-    await uow.CommitAsync();
-    return Results.NoContent();
+    try
+    {
+        var updated = await service.UpdateAsync(userId.Value, request);
+        return updated ? Results.NoContent() : Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
 });
 
+reminders.MapDelete("/{id:guid}", async (HttpContext context, Guid id, IReminderService service) =>
+{
+    var userId = GetUserId(context);
+    if (userId is null)
+    {
+        return Results.Unauthorized();
+    }
 
-// ---- авто-миграция и сидинг для демо ----
+    try
+    {
+        var deleted = await service.DeleteAsync(userId.Value, id);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 
-    static string HashSeedPassword(string password)
-    {
-        var salt = RandomNumberGenerator.GetBytes(16);
-        var hash = Rfc2898DeriveBytes.Pbkdf2(
-            Encoding.UTF8.GetBytes(password),
-            salt,
-            100_000,
-            HashAlgorithmName.SHA256,
-            32);
-
-        var payload = new byte[salt.Length + hash.Length];
-        Buffer.BlockCopy(salt, 0, payload, 0, salt.Length);
-        Buffer.BlockCopy(hash, 0, payload, salt.Length, hash.Length);
-        return Convert.ToBase64String(payload);
-    }
-
-    var hasChanges = false;
+    var dimensionSeeded = false;
 
     if (!db.Dimensions.Any())
     {
         var names = new[] { "Здоровье", "Карьера", "Финансы", "Отношения", "Личностный рост", "Досуг", "Дом", "Духовность" };
-        var dims = names.Select(n => new MyWorld.Domain.Models.Dimension { Id = Guid.NewGuid(), Name = n }).ToList();
-        db.Dimensions.AddRange(dims);
-        db.Questions.AddRange(dims.Select((d, i) => new MyWorld.Domain.Models.Question
+        var dimensions = names.Select(name => new MyWorld.Domain.Models.Dimension
         {
             Id = Guid.NewGuid(),
-            DimensionId = d.Id,
-            Text = $"Оцените удовлетворённость сферой «{d.Name}» по шкале 1..10",
-            Order = i + 1,
-            Type = MyWorld.Domain.Models.QuestionType.Scale
+            Name = name,
+        }).ToList();
+
+        db.Dimensions.AddRange(dimensions);
+
+        db.Questions.AddRange(dimensions.Select((dimension, index) => new MyWorld.Domain.Models.Question
+        {
+            Id = Guid.NewGuid(),
+            DimensionId = dimension.Id,
+            Text = $"Оцените удовлетворённость сферой «{dimension.Name}» по шкале 1..10",
+            Order = index + 1,
+            Type = MyWorld.Domain.Models.QuestionType.Scale,
         }));
-        hasChanges = true;
+
+        dimensionSeeded = true;
+    }
+
+    if (dimensionSeeded)
+    {
+        await db.SaveChangesAsync();
     }
 
     if (!db.Users.Any())
     {
-        var demoUser = new MyWorld.Domain.Models.User
-        {
-            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            Email = "demo@user.dev",
-            PasswordHash = HashSeedPassword("12345"),
-            FirstName = "Demo",
-            LastName = "User",
-            RegisteredAt = DateTime.UtcNow,
-            LastLoginAt = null
-        };
-        db.Users.Add(demoUser);
-        hasChanges = true;
-    }
-
-    if (hasChanges)
-    {
-        await db.SaveChangesAsync();
+        var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
+        await authService.RegisterAsync(new RegisterUserRequest("demo@user.dev", "12345", "Demo", "User"));
     }
 }
 
 app.Run();
-
-public record SubmitAnswerRequest(Guid QuestionId, int? Value, string? Text);
