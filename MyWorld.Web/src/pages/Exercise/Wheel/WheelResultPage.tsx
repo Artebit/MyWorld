@@ -13,7 +13,7 @@ export default function WheelResultPage() {
     useEffect(() => {
         if (!sessionId) return;
         let active = true;
-        setLoading(true);
+        setLoading(true);6
         setError(null);
         (async () => {
             try {

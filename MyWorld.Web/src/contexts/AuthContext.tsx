@@ -1,5 +1,5 @@
 import React, { createContext, useEffect, useState } from "react";
-import { login as loginRequest, register as registerRequest, type AuthUser } from "@/Services/auth";
+import { login as loginRequest, register as registerRequest, type AuthUser } from "@/services/auth";
 
 export type User = AuthUser;
 
