@@ -27,40 +27,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     }, []);
 
     async function login(email: string, password: string) {
-
-        const res = await fetch("http://localhost:5135/users");
-        if (!res.ok) {
-            throw new Error("Не удалось получить список пользователей");
-        }
-
-        const payload = await res.text();
-        if (!payload) {
-            throw new Error("Сервис авторизации временно недоступен");
-        }
-
-        const users: User[] = JSON.parse(payload);
-        const found = users.find(u => u.email === email /* && u.password === password */);
-        if (!found) throw new Error("User not found or wrong password");
-        setUser(found);
-        localStorage.setItem("auth_user", JSON.stringify(found));
+        const authenticated = await loginRequest({ email, password });
+        setUser(authenticated);
+        localStorage.setItem("auth_user", JSON.stringify(authenticated));
     }
 
     async function register(email: string, password: string, name?: string) {
-        const res = await fetch("http://localhost:5135/users");
-        if (!res.ok) {
-            throw new Error("Не удалось получить список пользователей");
-        }
+        let firstName: string | undefined;
+        let lastName: string | undefined;
 
-        const payload = await res.text();
-        if (!payload) {
-            throw new Error("Сервис авторизации временно недоступен");
-        }
-
-        const users: User[] = JSON.parse(payload);
-
-        if (name && name.trim().length > 0) {
-            const parts = name.trim().split(/\s+/);
-            firstName = parts[0];
+        const trimmed = name?.trim();
+        if (trimmed) {
+            const parts = trimmed.split(/\s+/);
+            [firstName] = parts;
             if (parts.length > 1) {
                 lastName = parts.slice(1).join(" ");
             }
